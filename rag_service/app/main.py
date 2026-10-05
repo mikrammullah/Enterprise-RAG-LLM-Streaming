@@ -1,10 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
-from starlette.responses import Response
+from starlette.responses import FileResponse, Response
 
+from app.api.observability import router as observability_router
 from app.api.rag import router as rag_router
 from app.core.config import get_settings
 from app.core.database import engine, lifespan_session
@@ -22,6 +24,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.project_name, version=settings.version, lifespan=lifespan)
 app.include_router(rag_router, prefix="/api/v1/rag", tags=["RAG"])
+app.include_router(observability_router, prefix="/api/v1/observability", tags=["Observability"])
 
 
 @app.middleware("http")
@@ -34,6 +37,16 @@ async def count_requests(request, call_next):
 @app.get("/healthz", tags=["Health"])
 async def healthz():
     return {"status": "healthy", "version": settings.version}
+
+
+@app.get("/", include_in_schema=False)
+async def dashboard():
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+
+@app.get("/demo/sample_policy.txt", include_in_schema=False)
+async def sample_policy():
+    return FileResponse(Path(__file__).parent / "static" / "sample_policy.txt", media_type="text/plain")
 
 
 @app.get("/readyz", tags=["Health"])

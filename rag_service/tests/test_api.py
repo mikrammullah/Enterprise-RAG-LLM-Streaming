@@ -52,6 +52,29 @@ async def test_health(client):
 
 
 @pytest.mark.asyncio
+async def test_public_dashboard_and_pipeline_overview(client):
+    page = await client.get("/")
+    assert page.status_code == 200
+    assert "Pipeline observability" in page.text
+    assert "runDemo" in page.text
+
+    overview = await client.get("/api/v1/observability/overview")
+    assert overview.status_code == 200
+    data = overview.json()
+    assert {pipeline["id"] for pipeline in data["pipelines"]} == {
+        "ingestion", "retrieval", "generation"
+    }
+    assert "tenant_id" not in overview.text
+
+
+@pytest.mark.asyncio
+async def test_public_sample_policy_is_served(client):
+    response = await client.get("/demo/sample_policy.txt")
+    assert response.status_code == 200
+    assert "one-hour initial response" in response.text
+
+
+@pytest.mark.asyncio
 async def test_document_ingestion_and_query(client):
     headers = {"X-Tenant-ID": "demo"}
     ingested = await client.post(

@@ -11,6 +11,7 @@ from app.api.deps import get_rag_service, get_tenant_id
 from app.core.config import Settings, get_settings
 from app.schemas import IngestResponse, QueryRequest, QueryResponse
 from app.services.rag_service import RAGService
+from app.telemetry import telemetry
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -34,12 +35,14 @@ async def ingest_document(
     rag: RAGService = Depends(get_rag_service),
     settings: Settings = Depends(get_settings),
 ) -> IngestResponse:
-    payload = await file.read(settings.max_upload_bytes + 1)
+    async with telemetry.track("upload"):
+        payload = await file.read(settings.max_upload_bytes + 1)
     if len(payload) > settings.max_upload_bytes:
         raise HTTPException(status_code=413, detail="File exceeds the configured upload limit")
     filename = file.filename or "upload.txt"
     try:
-        content = extract_text(filename, payload)
+        async with telemetry.track("extract"):
+            content = extract_text(filename, payload)
         result = await rag.ingest(tenant_id, filename, content)
     except (UnicodeDecodeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

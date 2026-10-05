@@ -21,6 +21,7 @@ docker compose up --build
 ```
 
 The API and interactive OpenAPI docs are at `http://localhost:8000` and `http://localhost:8000/docs`. With the default local providers, no API key is needed; use `X-Tenant-ID: demo` in API calls.
+The public pipeline dashboard is at `http://localhost:8000`; its read-only API is under `/api/v1/observability`. Select a tenant, optionally enter its API key, then run the sample pipeline to watch actual upload, embedding, indexing, retrieval, and generation events appear. The event stream is live for requests handled by the current API process.
 
 Ingest a document:
 
@@ -46,6 +47,9 @@ For real model calls, set `EMBEDDING_PROVIDER=openai`, `LLM_PROVIDER=openai`, an
 - `POST /api/v1/rag/query`: JSON `{ "query": "...", "top_k": 4 }`; returns answer and cited source chunks.
 - `POST /api/v1/rag/stream`: same body; SSE emits `sources`, token `message` events, then `done`.
 - `DELETE /api/v1/rag/documents/{document_id}`: delete a tenant's indexed document.
+- `GET /api/v1/observability/overview`: public pipeline and stage status, without tenant identifiers or document data.
+- `GET /api/v1/observability/events`: recent stage events; use `after` to resume from an event ID.
+- `GET /api/v1/observability/stream`: public Server-Sent Events feed with `Last-Event-ID` reconnection support.
 - `GET /healthz`: process liveness; `GET /readyz`: database readiness; `GET /metrics`: Prometheus text format.
 
 All RAG routes require `X-Tenant-ID`. When `API_KEYS` is configured, they also require the key bound to that tenant. Keep the API behind authenticated infrastructure in production: this demo does not implement user identity, document ACLs, malware scanning, or audit retention policy.
@@ -63,6 +67,6 @@ Tests cover chunking and HTTP behavior with a fake service, so they do not need 
 
 ## Architecture
 
-Uploads are size-limited, text is extracted, and overlapping chunks are embedded in batches. Each stored row includes `tenant_id`; retrieval and deletion always filter by that tenant before touching content. PostgreSQL stores metadata and pgvector embeddings. The provider layer selects deterministic local embeddings/extractive answers or OpenAI APIs through environment configuration. Streaming uses SSE with source metadata before generated tokens.
+Uploads are size-limited, text is extracted, and overlapping chunks are embedded in batches. Each stored row includes `tenant_id`; retrieval and deletion always filter by that tenant before touching content. PostgreSQL stores metadata and pgvector embeddings. The provider layer selects deterministic local embeddings/extractive answers or OpenAI APIs through environment configuration. Streaming uses SSE with source metadata before generated tokens. The observability ledger records stage status and duration only; it does not retain queries, answer text, tenant IDs, or secrets. It is process-local, bounded, and resets on restart; use a durable telemetry backend for multi-replica or long-term monitoring.
 
 For a production rollout, replace startup `create_all` with versioned Alembic migrations, add OIDC/JWT identity and document-level authorization, evaluate retrieval quality with a curated test set, and set database backups, TLS, resource limits, and secret rotation.
